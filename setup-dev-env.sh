@@ -27,6 +27,10 @@ while [ "$1" != "" ]; do
         # Disable installation of 'cuda-drivers' in the role 'cuda'.
         option_no_cuda_drivers=true
         ;;
+    --no-dev)
+        # Disable installation dev packages .
+        option_no_dev=true
+        ;;
     *)
         args+=("$1")
         ;;
@@ -77,6 +81,14 @@ if [ "$option_no_cuda_drivers" = "true" ]; then
     ansible_args+=("--extra-vars" "install_cuda_drivers=false")
 fi
 
+# Check installation of dev package
+if [ "$option_no_dev" = "true" ]; then
+    ansible_args+=("--extra-vars" "install_devel=false")
+    ansible_args+=("--extra-vars" "installation_type=ros-base")
+else
+    ansible_args+=("--extra-vars" "install_devel=true")
+fi
+
 # Load env
 source "$SCRIPT_DIR/amd64.env"
 if [ "$(uname -m)" = "aarch64" ]; then
@@ -101,23 +113,17 @@ if ! (command -v git >/dev/null 2>&1); then
     sudo apt-get -y install git
 fi
 
-# Install pip for ansible
-if ! (command -v pip3 >/dev/null 2>&1); then
+# Install pipx for ansible
+if ! (python3 -m pipx --version >/dev/null 2>&1); then
     sudo apt-get -y update
-    sudo apt-get -y install python3-pip
+    sudo apt-get -y install python3-pip python3-venv
+    python3 -m pip install --user pipx
 fi
 
 # Install ansible
-ansible_version=$(pip3 list | grep -oP "^ansible\s+\K([0-9]+)" || true)
-if [ "$ansible_version" != "6" ]; then
-    sudo apt-get -y purge ansible
-    pip3 install -U "ansible==6.*"
-    # Workaround for https://github.com/autowarefoundation/autoware/issues/2849
-    pip3 install -U "pyOpenSSL>=22.0.0"
-fi
-
-# For Python packages installed with user privileges
-export PATH="$HOME/.local/bin:$PATH"
+python3 -m pipx ensurepath
+export PATH="${PIPX_BIN_DIR:=$HOME/.local/bin}:$PATH"
+pipx install --include-deps --force "ansible==6.*"
 
 # Install ansible collections
 echo -e "\e[36m"ansible-galaxy collection install -f -r "$SCRIPT_DIR/ansible-galaxy-requirements.yaml" "\e[m"
